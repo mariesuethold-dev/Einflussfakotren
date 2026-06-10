@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Katalase & pH (Strukturmodell)</title>
+
+<style>
+body{
+    margin:0;
+    background:#eef2f7;
+    font-family:Arial, sans-serif;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    height:100vh;
+}
+
+.container{
+    width:1000px;
+    background:white;
+    border-radius:20px;
+    padding:20px;
+    box-shadow:0 0 20px rgba(0,0,0,0.15);
+}
+
+label{
+    font-size:18px;
+    font-weight:bold;
+}
+
+input{
+    width:100%;
+}
+
+canvas{
+    display:block;
+    margin:auto;
+    background:white;
+    border:2px solid #cbd5e1;
+    border-radius:15px;
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+<label>
+pH-Wert:
+<span id="ph">7</span>
+</label>
+
+<input type="range" id="slider" min="0" max="14" value="7">
+
+<canvas id="canvas" width="950" height="550"></canvas>
+
+</div>
+
+<script>
+
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+
+const slider = document.getElementById("slider");
+const phLabel = document.getElementById("ph");
+
+let pH = 7;
+
+const enzymes = [];
+const substrates = [];
+const products = [];
+
+const ENZYMES = 8;
+
+// ---------------- OPTIMUM ----------------
+function activityFactor(ph){
+    return Math.exp(-Math.pow(ph-7,2)/3.2);
+}
+
+// ---------------- ENZYM ----------------
+class Enzym{
+
+    constructor(x,y){
+        this.x=x;
+        this.y=y;
+
+        this.busy=false;
+        this.timer=0;
+        this.substrate=null;
+
+        this.reacting=false;
+    }
+
+    getState(){
+
+        if(pH<4) return "acid_damage";
+        if(pH>10) return "base_damage";
+        return "normal";
+    }
+
+    draw(){
+
+        let state = this.getState();
+        let act = activityFactor(pH);
+
+        // Körperfarbe
+        ctx.beginPath();
+
+        if(this.reacting){
+            ctx.fillStyle="#facc15"; // GELB während Reaktion
+        }
+        else{
+            ctx.fillStyle="#2563eb"; // stabil
+        }
+
+        ctx.arc(this.x,this.y,45,0,Math.PI*2);
+        ctx.fill();
+
+        // aktives Zentrum
+        ctx.beginPath();
+        ctx.fillStyle="white";
+
+        if(state==="acid_damage"){
+            // zerstörte Struktur
+            ctx.moveTo(this.x-20,this.y-5);
+            ctx.lineTo(this.x,this.y+18);
+            ctx.lineTo(this.x+20,this.y-12);
+            ctx.lineTo(this.x+10,this.y+12);
+            ctx.lineTo(this.x-10,this.y+12);
+        }
+
+        else if(state==="base_damage"){
+            // andere deformierte Struktur
+            ctx.rect(this.x-18,this.y-18,36,36);
+        }
+
+        else{
+            // funktionelle Katalase-Tasche
+            ctx.moveTo(this.x-18,this.y+15);
+            ctx.lineTo(this.x-6,this.y-10);
+            ctx.lineTo(this.x,this.y+5);
+            ctx.lineTo(this.x+6,this.y-10);
+            ctx.lineTo(this.x+18,this.y+15);
+        }
+
+        ctx.closePath();
+        ctx.fill();
+
+        // Substrat sichtbar gebunden
+        if(this.busy && state==="normal"){
+            ctx.beginPath();
+            ctx.fillStyle="#22c55e";
+            ctx.arc(this.x,this.y,6,0,Math.PI*2);
+            ctx.fill();
+        }
+    }
+
+    update(){
+
+        let state = this.getState();
+        let act = activityFactor(pH);
+
+        if(this.busy && state==="normal"){
+
+            this.reacting = true;
+
+            this.timer -= (0.5 + act*2.5);
+
+            if(this.timer<=0){
+
+                products.push({
+                    x:this.x,
+                    y:this.y,
+                    dx:(Math.random()-0.5)*5,
+                    dy:(Math.random()-0.5)*5,
+                    life:120
+                });
+
+                const i=substrates.indexOf(this.substrate);
+                if(i>-1) substrates.splice(i,1);
+
+                this.busy=false;
+                this.substrate=null;
+                this.reacting=false;
+            }
+        } else {
+            this.reacting=false;
+        }
+    }
+}
+
+// ---------------- SUBSTRAT ----------------
+class Substrat{
+
+    constructor(){
+        this.x=Math.random()*canvas.width;
+        this.y=Math.random()*canvas.height;
+
+        this.dx=(Math.random()-0.5)*2;
+        this.dy=(Math.random()-0.5)*2;
+
+        this.bound=false;
+    }
+
+    draw(){
+
+        if(this.bound) return;
+
+        ctx.beginPath();
+        ctx.fillStyle="#22c55e";
+
+        ctx.moveTo(this.x-18,this.y+15);
+        ctx.lineTo(this.x-6,this.y-10);
+        ctx.lineTo(this.x,this.y+5);
+        ctx.lineTo(this.x+6,this.y-10);
+        ctx.lineTo(this.x+18,this.y+15);
+
+        ctx.closePath();
+        ctx.fill();
+    }
+
+    update(){
+
+        if(this.bound) return;
+
+        let act = activityFactor(pH);
+
+        let speed = 0.3 + act*4;
+
+        this.x += this.dx*speed;
+        this.y += this.dy*speed;
+
+        if(this.x<0) this.x=canvas.width;
+        if(this.x>canvas.width) this.x=0;
+        if(this.y<0) this.y=canvas.height;
+        if(this.y>canvas.height) this.y=0;
+
+        let state = (pH<4 || pH>10) ? "damaged" : "normal";
+
+        for(let e of enzymes){
+
+            if(e.busy || state==="damaged") continue;
+
+            let d=Math.hypot(this.x-e.x,this.y-e.y);
+
+            if(d<40){
+
+                this.bound=true;
+
+                e.busy=true;
+                e.timer=90/Math.max(act,0.2);
+                e.substrate=this;
+
+                this.x=e.x;
+                this.y=e.y;
+
+                break;
+            }
+        }
+    }
+}
+
+// ---------------- INIT ----------------
+function init(){
+
+    enzymes.length=0;
+
+    for(let i=0;i<ENZYMES;i++){
+
+        enzymes.push(new Enzym(
+            140+(i%4)*220,
+            170+Math.floor(i/4)*220
+        ));
+    }
+}
+
+// ---------------- SUBSTRATE ZUFUHR ----------------
+function setSub(n){
+
+    while(substrates.length<n)
+        substrates.push(new Substrat());
+
+    while(substrates.length>n)
+        substrates.pop();
+}
+
+// ---------------- PRODUCTS ----------------
+function updateProducts(){
+
+    for(let i=products.length-1;i>=0;i--){
+
+        let p=products[i];
+
+        p.x+=p.dx;
+        p.y+=p.dy;
+
+        p.life--;
+
+        if(p.life<=0) products.splice(i,1);
+    }
+}
+
+function drawProducts(){
+
+    for(let p of products){
+
+        ctx.beginPath();
+        ctx.fillStyle="#ef4444";
+        ctx.arc(p.x,p.y,5,0,Math.PI*2);
+        ctx.fill();
+    }
+}
+
+// ---------------- LOOP ----------------
+function animate(){
+
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+
+    for(let s of substrates){
+        s.update();
+        s.draw();
+    }
+
+    for(let e of enzymes){
+        e.update();
+        e.draw();
+    }
+
+    updateProducts();
+    drawProducts();
+
+    requestAnimationFrame(animate);
+}
+
+// ---------------- SLIDER ----------------
+slider.addEventListener("input",()=>{
+
+    pH=Number(slider.value);
+    phLabel.textContent=pH;
+
+    setSub(40);
+});
+
+// ---------------- START ----------------
+init();
+setSub(40);
+animate();
+
+</script>
+
+</body>
+</html>
+</html>
