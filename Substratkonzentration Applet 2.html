@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Schlüssel-Schloss-Prinzip</title>
+
+<style>
+
+body{
+    margin:0;
+    background:#eef2f7;
+    font-family:Arial, sans-serif;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    height:100vh;
+}
+
+.container{
+    width:1000px;
+    background:white;
+    border-radius:20px;
+    padding:20px;
+    box-shadow:0 0 20px rgba(0,0,0,0.15);
+}
+
+h1{
+    text-align:center;
+    margin-top:0;
+}
+
+.controls{
+    margin-bottom:15px;
+}
+
+label{
+    font-size:18px;
+    font-weight:bold;
+}
+
+input[type=range]{
+    width:100%;
+    margin-top:10px;
+}
+
+canvas{
+    display:block;
+    margin:auto;
+    background:white;
+    border:2px solid #cbd5e1;
+    border-radius:15px;
+}
+
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+<h1>Enzymaktivität</h1>
+
+<div class="controls">
+
+<label>
+Substratmenge:
+<span id="wert">15</span>
+</label>
+
+<input type="range" id="slider" min="5" max="160" value="15">
+
+</div>
+
+<canvas id="canvas" width="950" height="550"></canvas>
+
+</div>
+
+<script>
+
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+
+const slider = document.getElementById("slider");
+const wert = document.getElementById("wert");
+
+const enzyme = [];
+const substrate = [];
+const produkte = [];
+
+const ENZYME_ANZAHL = 8;
+
+class Enzym{
+
+    constructor(x,y){
+
+        this.x = x;
+        this.y = y;
+
+        this.busy = false;
+        this.timer = 0;
+        this.substrat = null;
+    }
+
+    draw(){
+
+        // Enzymkörper
+
+        ctx.beginPath();
+
+        ctx.fillStyle = this.busy ? "#f59e0b" : "#2563eb";
+
+        ctx.arc(this.x,this.y,40,0,Math.PI*2);
+
+        ctx.fill();
+
+        // Aktives Zentrum (passende Einkerbung)
+
+        ctx.beginPath();
+
+        ctx.fillStyle = "white";
+
+        ctx.moveTo(this.x-12,this.y-12);
+        ctx.lineTo(this.x,this.y);
+        ctx.lineTo(this.x+12,this.y-12);
+        ctx.lineTo(this.x+12,this.y+12);
+        ctx.lineTo(this.x-12,this.y+12);
+
+        ctx.closePath();
+
+        ctx.fill();
+
+        // gebundenes Substrat sichtbar
+
+        if(this.busy){
+
+            ctx.beginPath();
+
+            ctx.fillStyle = "#22c55e";
+
+            ctx.moveTo(this.x-12,this.y-12);
+            ctx.lineTo(this.x,this.y);
+            ctx.lineTo(this.x+12,this.y-12);
+            ctx.lineTo(this.x+12,this.y+12);
+            ctx.lineTo(this.x-12,this.y+12);
+
+            ctx.closePath();
+
+            ctx.fill();
+        }
+    }
+
+    update(){
+
+        if(this.busy){
+
+            this.timer--;
+
+            if(this.timer <= 0){
+
+                // Produkte entstehen
+
+                for(let i=0;i<2;i++){
+
+                    produkte.push({
+
+                        x:this.x,
+                        y:this.y,
+
+                        dx:(Math.random()-0.5)*5,
+                        dy:(Math.random()-0.5)*5,
+
+                        life:100
+                    });
+                }
+
+                const index = substrate.indexOf(this.substrat);
+
+                if(index > -1){
+
+                    substrate.splice(index,1);
+                }
+
+                this.busy = false;
+                this.substrat = null;
+            }
+        }
+    }
+}
+
+class Substrat{
+
+    constructor(){
+
+        this.x = Math.random()*canvas.width;
+        this.y = Math.random()*canvas.height;
+
+        this.dx = (Math.random()-0.5)*2.5;
+        this.dy = (Math.random()-0.5)*2.5;
+
+        this.size = 12;
+
+        this.bound = false;
+    }
+
+    draw(){
+
+        if(this.bound) return;
+
+        // Schlüssel-Form
+
+        ctx.beginPath();
+
+        ctx.fillStyle = "#22c55e";
+
+        ctx.moveTo(this.x-12,this.y-12);
+        ctx.lineTo(this.x,this.y);
+        ctx.lineTo(this.x+12,this.y-12);
+        ctx.lineTo(this.x+12,this.y+12);
+        ctx.lineTo(this.x-12,this.y+12);
+
+        ctx.closePath();
+
+        ctx.fill();
+    }
+
+    update(){
+
+        if(this.bound) return;
+
+        this.x += this.dx;
+        this.y += this.dy;
+
+        if(this.x < 0 || this.x > canvas.width){
+
+            this.dx *= -1;
+        }
+
+        if(this.y < 0 || this.y > canvas.height){
+
+            this.dy *= -1;
+        }
+
+        // Schlüssel-Schloss-Bindung
+
+        for(let e of enzyme){
+
+            if(!e.busy){
+
+                const dist = Math.hypot(this.x-e.x,this.y-e.y);
+
+                if(dist < 32){
+
+                    this.bound = true;
+
+                    e.busy = true;
+
+                    e.timer = 100;
+
+                    e.substrat = this;
+
+                    this.x = e.x;
+                    this.y = e.y;
+
+                    break;
+                }
+            }
+        }
+    }
+}
+
+function initEnzyme(){
+
+    enzyme.length = 0;
+
+    for(let i=0;i<ENZYME_ANZAHL;i++){
+
+        const x = 140 + (i%4)*220;
+        const y = 170 + Math.floor(i/4)*220;
+
+        enzyme.push(new Enzym(x,y));
+    }
+}
+
+function setSubstrateAmount(amount){
+
+    while(substrate.length < amount){
+
+        substrate.push(new Substrat());
+    }
+
+    while(substrate.length > amount){
+
+        substrate.pop();
+    }
+}
+
+slider.addEventListener("input", ()=>{
+
+    wert.textContent = slider.value;
+
+    setSubstrateAmount(Number(slider.value));
+});
+
+function updateProdukte(){
+
+    for(let i=produkte.length-1;i>=0;i--){
+
+        const p = produkte[i];
+
+        p.x += p.dx;
+        p.y += p.dy;
+
+        p.life--;
+
+        if(p.life <= 0){
+
+            produkte.splice(i,1);
+        }
+    }
+}
+
+function drawProdukte(){
+
+    for(let p of produkte){
+
+        ctx.beginPath();
+
+        ctx.fillStyle = "#ef4444";
+
+        ctx.arc(p.x,p.y,5,0,Math.PI*2);
+
+        ctx.fill();
+    }
+}
+
+function drawSaettigung(){
+
+    const busy = enzyme.filter(e => e.busy).length;
+
+    if(busy === ENZYME_ANZAHL){
+
+        ctx.fillStyle = "#dc2626";
+        ctx.font = "22px Arial";
+        ctx.fillText("Sättigung", 20, 35);
+    }
+}
+
+function animate(){
+
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+
+    for(let s of substrate){
+
+        s.update();
+        s.draw();
+    }
+
+    for(let e of enzyme){
+
+        e.update();
+        e.draw();
+    }
+
+    updateProdukte();
+    drawProdukte();
+
+    drawSaettigung();
+
+    requestAnimationFrame(animate);
+}
+
+initEnzyme();
+setSubstrateAmount(Number(slider.value));
+
+animate();
+
+</script>
+
+</body>
+</html>
